@@ -10,6 +10,14 @@ sysctl -w net.ipv4.ip_forward=1 2>/dev/null \
     || echo "[warn] Could not set ip_forward via sysctl — ensure it is enabled on the host or via docker-compose sysctls."
 
 # ---------------------------------------------------------------------------
+# Start D-Bus system daemon (warp-svc requires it for IPC)
+# ---------------------------------------------------------------------------
+echo "[info] Starting dbus..."
+mkdir -p /run/dbus
+dbus-daemon --system --fork
+echo "[info] dbus started."
+
+# ---------------------------------------------------------------------------
 # Start the WARP background service
 # ---------------------------------------------------------------------------
 echo "[info] Starting warp-svc..."

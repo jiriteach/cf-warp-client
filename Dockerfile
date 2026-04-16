@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     procps \
     iproute2 \
+    dbus \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Cloudflare WARP
