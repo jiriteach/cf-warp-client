@@ -1,0 +1,35 @@
+services:
+  cloudflare-mesh:
+    build: .
+    container_name: cloudflare-warp-client
+    restart: unless-stopped
+
+    # NET_ADMIN is required for WARP to create tunnel interfaces.
+    # SYS_MODULE allows loading kernel modules (e.g. wireguard) if needed.
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+
+    # Pass IP forwarding through to the container's network namespace.
+    # The host must also have net.ipv4.ip_forward=1 set.
+    sysctls:
+      - net.ipv4.ip_forward=1
+
+    environment:
+      # Replace the token below with your actual connector token.
+      # You can also pass it at runtime:
+      #   CONNECTOR_TOKEN=<token> docker compose up
+      - CONNECTOR_TOKEN=
+
+    volumes:
+      # Persist WARP registration state so re-creating the container
+      # does not require re-registering the connector.
+      - warp-data:/var/lib/cloudflare-warp
+
+    # network_mode host gives WARP direct access to the host network stack,
+    # which is the simplest setup for a mesh/connector node. Remove this line
+    # (and add explicit port mappings instead) if you prefer bridge networking.
+    network_mode: host
+
+volumes:
+  warp-data:
