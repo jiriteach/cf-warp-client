@@ -25,6 +25,8 @@ sysctl -w net.ipv4.ip_forward=1 2>/dev/null \
 # ---------------------------------------------------------------------------
 echo "[info] Starting dbus..."
 mkdir -p /run/dbus
+# Remove stale pid file left over from a previous container stop
+rm -f /run/dbus/pid
 dbus-daemon --system --fork
 echo "[info] dbus started."
 

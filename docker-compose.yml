@@ -31,6 +31,11 @@ services:
       # does not require re-registering the connector.
       - warp-data:/var/lib/cloudflare-warp
 
+    # Mount /run as tmpfs so runtime files (dbus pid, sockets, etc.) are always
+    # cleared when the container stops — prevents stale file errors on restart.
+    tmpfs:
+      - /run
+
     # network_mode host gives WARP direct access to the host network stack,
     # which is the simplest setup for a mesh/connector node. Remove this line
     # (and add explicit port mappings instead) if you prefer bridge networking.
