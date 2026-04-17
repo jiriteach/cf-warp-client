@@ -13,12 +13,36 @@ fi
 echo "[info] TUN device ready."
 
 # ---------------------------------------------------------------------------
-# Enable IP forwarding (required for mesh/connector routing)
-# Note: the host sysctl net.ipv4.ip_forward=1 must also be set, OR the
-# container must run with --privileged / the sysctl set in docker-compose.
+# Kernel networking — ip_forward and reverse path filtering
 # ---------------------------------------------------------------------------
+# Enable IP forwarding so the kernel passes packets between interfaces.
+# With network_mode: host this sets it on the host network namespace directly.
 sysctl -w net.ipv4.ip_forward=1 2>/dev/null \
-    || echo "[warn] Could not set ip_forward via sysctl — ensure it is enabled on the host or via docker-compose sysctls."
+    || echo "[warn] Could not set ip_forward — ensure it is enabled on the host."
+
+# Disable reverse path filtering globally and per-interface.
+# rp_filter=1 (the default) drops packets whose source address is not reachable
+# via the interface they arrived on. WARP connector traffic is asymmetric by
+# design, so rp_filter will silently drop legitimate return traffic.
+sysctl -w net.ipv4.conf.all.rp_filter=0 2>/dev/null \
+    || echo "[warn] Could not set rp_filter on all."
+sysctl -w net.ipv4.conf.default.rp_filter=0 2>/dev/null \
+    || echo "[warn] Could not set rp_filter on default."
+
+# ---------------------------------------------------------------------------
+# iptables — forwarding and masquerade (NAT) rules
+# ---------------------------------------------------------------------------
+# Allow all forwarded traffic (packets transiting this host between interfaces).
+iptables -A FORWARD -j ACCEPT 2>/dev/null \
+    || echo "[warn] Could not set FORWARD rule."
+
+# Masquerade outbound traffic so that hosts on the local subnet see the
+# connector's own IP as the source, ensuring return traffic routes back
+# through the connector rather than trying to reach the WARP peer directly.
+iptables -t nat -A POSTROUTING -j MASQUERADE 2>/dev/null \
+    || echo "[warn] Could not set MASQUERADE rule."
+
+echo "[info] Routing rules applied."
 
 # ---------------------------------------------------------------------------
 # Start D-Bus system daemon (warp-svc requires it for IPC)

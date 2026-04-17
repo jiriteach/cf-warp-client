@@ -8,6 +8,7 @@ services:
     # SYS_MODULE allows loading kernel modules (e.g. wireguard) if needed.
     cap_add:
       - NET_ADMIN
+      - NET_RAW    # required for iptables masquerade rules on some kernels
       - SYS_MODULE
 
     # Expose the TUN device so WARP can open a tunnel interface.
