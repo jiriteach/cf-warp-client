@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     procps \
     iproute2 \
-		iputils-ping \
+    iputils-ping \
+    iptables \
     dbus \
     && rm -rf /var/lib/apt/lists/*
 
