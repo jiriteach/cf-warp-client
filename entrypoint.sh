@@ -110,6 +110,32 @@ warp-cli --accept-tos connect
 echo "[info] WARP mesh connector is up and running."
 
 # ---------------------------------------------------------------------------
+# rp_filter keeper
+#
+# Docker daemon writes net.ipv4.conf.all.rp_filter=2 whenever it manages its
+# bridge networks. Because the effective rp_filter per interface is
+# MAX(conf/all, conf/<iface>), all=2 overrides any per-interface setting of 0.
+# This keeper re-applies 0 every 5 seconds so Docker's resets are corrected
+# before they can drop traffic. privileged: true in compose ensures the writes
+# are not blocked by capability or seccomp restrictions.
+# ---------------------------------------------------------------------------
+(
+    LAN_IFACE=$(ip route show default 2>/dev/null | awk '/default/ {print $5}' | head -1)
+    echo "[rp_filter-keeper] Starting. LAN interface: ${LAN_IFACE:-unknown}"
+    while true; do
+        echo 0 > /proc/sys/net/ipv4/conf/all/rp_filter     2>/dev/null || true
+        echo 0 > /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null || true
+        if [ -n "$LAN_IFACE" ] && [ -f "/proc/sys/net/ipv4/conf/${LAN_IFACE}/rp_filter" ]; then
+            echo 0 > "/proc/sys/net/ipv4/conf/${LAN_IFACE}/rp_filter" 2>/dev/null || true
+        fi
+        if [ -f /proc/sys/net/ipv4/conf/CloudflareWARP/rp_filter ]; then
+            echo 0 > /proc/sys/net/ipv4/conf/CloudflareWARP/rp_filter 2>/dev/null || true
+        fi
+        sleep 5
+    done
+) &
+
+# ---------------------------------------------------------------------------
 # Connectivity watchdog
 #
 # Docker only auto-restarts a container when it exits — not when it is marked

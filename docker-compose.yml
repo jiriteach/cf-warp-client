@@ -4,8 +4,11 @@ services:
     container_name: cloudflare-warp-client
     restart: unless-stopped
 
-    # NET_ADMIN is required for WARP to create tunnel interfaces.
-    # SYS_MODULE allows loading kernel modules (e.g. wireguard) if needed.
+    # privileged is required so the container can write net.ipv4.conf.all.rp_filter=0
+    # and have it stick. Docker daemon continuously resets rp_filter=2 on bridge
+    # interfaces it manages; without privileged the container's proc writes are
+    # blocked or immediately overridden. cap_add entries are kept for clarity.
+    privileged: true
     cap_add:
       - NET_ADMIN
       - NET_RAW
