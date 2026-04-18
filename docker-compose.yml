@@ -4,23 +4,21 @@ services:
     container_name: cloudflare-warp-client
     restart: unless-stopped
 
-    # privileged is required so the container can write net.ipv4.conf.all.rp_filter=0
-    # and have it stick. Docker daemon continuously resets rp_filter=2 on bridge
-    # interfaces it manages; without privileged the container's proc writes are
-    # blocked or immediately overridden. cap_add entries are kept for clarity.
-    privileged: true
+    # NET_ADMIN is required for WARP to create tunnel interfaces.
+    # SYS_MODULE allows loading kernel modules (e.g. wireguard) if needed.
     cap_add:
       - NET_ADMIN
-      - NET_RAW
       - SYS_MODULE
 
     # Expose the TUN device so WARP can open a tunnel interface.
     devices:
       - /dev/net/tun:/dev/net/tun
 
-    # ip_forward and rp_filter are applied by the entrypoint at startup via
-    # sysctl. With network_mode: host these write directly to the host's
-    # network namespace — no host-level configuration required.
+    # Pass IP forwarding through to the container's network namespace.
+    # The host must also have net.ipv4.ip_forward=1 set.
+
+    #sysctls:
+    #  - net.ipv4.ip_forward=1
 
     environment:
       # Replace the token below with your actual connector token.
@@ -37,17 +35,6 @@ services:
     # cleared when the container stops — prevents stale file errors on restart.
     tmpfs:
       - /run
-
-    # Healthcheck mirrors the HEALTHCHECK in the Dockerfile.
-    # If WARP is not Connected after 3 consecutive failures the container is
-    # marked unhealthy. The watchdog in entrypoint.sh then kills warp-svc,
-    # the container exits, and restart: unless-stopped brings it back up.
-    healthcheck:
-      test: ["CMD-SHELL", "warp-cli --accept-tos status 2>/dev/null | grep -q 'Connected' || exit 1"]
-      interval: 30s
-      timeout: 10s
-      start_period: 90s
-      retries: 3
 
     # network_mode host gives WARP direct access to the host network stack,
     # which is the simplest setup for a mesh/connector node. Remove this line
