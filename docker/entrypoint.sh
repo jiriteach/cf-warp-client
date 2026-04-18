@@ -67,6 +67,22 @@ configure_firewall() {
   fi
 }
 
+start_dbus() {
+  mkdir -p /run/dbus
+  rm -f /run/dbus/pid
+
+  if [[ -S /run/dbus/system_bus_socket ]]; then
+    log "System D-Bus socket already present"
+    return 0
+  fi
+
+  log "Starting system D-Bus"
+  dbus-daemon --system --nofork --nopidfile > /var/log/cloudflare-warp/dbus.stdout.log 2>&1 &
+  DBUS_PID=$!
+  tail -n 0 -F /var/log/cloudflare-warp/dbus.stdout.log | log_command_output "[dbus] " &
+  DBUS_LOG_TAIL_PID=$!
+}
+
 start_warp_service() {
   : > /var/log/cloudflare-warp/warp-svc.stdout.log
   log "Starting warp-svc"
@@ -171,9 +187,13 @@ print_status() {
 cleanup() {
   log "Stopping background processes"
   kill -TERM "${WARP_STATUS_PID:-}" 2>/dev/null || true
+  kill -TERM "${DBUS_LOG_TAIL_PID:-}" 2>/dev/null || true
+  kill -TERM "${DBUS_PID:-}" 2>/dev/null || true
   kill -TERM "${WARP_LOG_TAIL_PID:-}" 2>/dev/null || true
   kill -TERM "${WARP_SVC_PID:-}" 2>/dev/null || true
   wait "${WARP_STATUS_PID:-}" 2>/dev/null || true
+  wait "${DBUS_LOG_TAIL_PID:-}" 2>/dev/null || true
+  wait "${DBUS_PID:-}" 2>/dev/null || true
   wait "${WARP_LOG_TAIL_PID:-}" 2>/dev/null || true
   wait "${WARP_SVC_PID:-}" 2>/dev/null || true
 }
@@ -211,6 +231,7 @@ main() {
   check_tun
   configure_forwarding
   configure_firewall
+  start_dbus
   start_warp_service
   forward_signals
   wait_for_cli

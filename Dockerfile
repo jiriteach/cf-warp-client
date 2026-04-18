@@ -6,6 +6,7 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
+        dbus \
         gnupg \
         iproute2 \
         iptables \
@@ -26,7 +27,7 @@ RUN apt-get update \
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
-    && mkdir -p /var/lib/cloudflare-warp /var/log/cloudflare-warp
+    && mkdir -p /run/dbus /var/lib/cloudflare-warp /var/log/cloudflare-warp
 
 VOLUME ["/var/lib/cloudflare-warp", "/var/log/cloudflare-warp"]
 
