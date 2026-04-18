@@ -5,9 +5,9 @@ This image packages the Linux `cloudflare-warp` client for running a Cloudflare 
 It is designed for:
 
 - headless `warp-cli` connector enrollment
-- bidirectional mesh traffic
-- subnet routing through the container
-- routed return traffic by enabling forwarding and disabling reverse path filtering
+- plain node connectivity by default
+- optional subnet routing through the container
+- optional routed return traffic by enabling forwarding and disabling reverse path filtering
 - network troubleshooting with `ping` and `traceroute`
 
 ## What is included
@@ -18,9 +18,9 @@ It is designed for:
 - an entrypoint that:
   - starts `warp-svc`
   - streams `warp-svc` logs into `docker logs`
-  - enables IPv4 forwarding
-  - disables `rp_filter` to avoid dropping asymmetric return traffic
-  - accepts forwarded traffic in the `FORWARD` chain
+  - optionally enables IPv4 forwarding for subnet routing
+  - optionally disables `rp_filter` to avoid dropping asymmetric return traffic
+  - optionally accepts forwarded traffic in the `FORWARD` chain
   - optionally runs `warp-cli connector new <TOKEN>`
   - optionally runs `warp-cli connect`
   - periodically logs `warp-cli status` changes
@@ -45,7 +45,15 @@ Set your connector token first:
 export WARP_CONNECTOR_TOKEN='your-cloudflare-mesh-token'
 ```
 
-If you are using `network_mode: host`, apply the routing sysctls on the Docker host before starting the container:
+By default the container behaves like a WARP Mesh node and does not enable subnet forwarding.
+
+To turn on subnet routing and reverse-path handling, set:
+
+```bash
+export WARP_ENABLE_SUBNET_ROUTING=true
+```
+
+If subnet routing is enabled and you are using `network_mode: host`, apply the routing sysctls on the Docker host before starting the container:
 
 ```bash
 sudo sysctl -w net.ipv4.ip_forward=1
@@ -65,6 +73,8 @@ If you want to manage forwarding policy outside the container, set:
 ```bash
 export WARP_MANAGE_FORWARD_CHAIN=false
 ```
+
+`WARP_MANAGE_FORWARD_CHAIN` only matters when `WARP_ENABLE_SUBNET_ROUTING=true`.
 
 The container also supports periodic status logging. The default interval is 15 seconds, and only changed status snapshots are emitted:
 
@@ -96,7 +106,9 @@ docker exec -it cf-warp-cli traceroute 1.1.1.1
 
 ## Routing notes
 
-For subnet routing to work end to end, the surrounding network must send the target CIDR back through this container's host. The container enables forwarding and avoids reverse path filtering drops, but upstream route tables still need to point the advertised subnet toward the Docker host running this container.
+When `WARP_ENABLE_SUBNET_ROUTING=false`, this container just joins Mesh as a node and does not try to route third-party subnet traffic.
+
+When `WARP_ENABLE_SUBNET_ROUTING=true`, the surrounding network must send the target CIDR back through this container's host. The container enables forwarding and avoids reverse path filtering drops, but upstream route tables still need to point the advertised subnet toward the Docker host running this container.
 
 If this is deployed in a cloud VPC, also make sure the instance or VM is allowed to forward traffic and that any source/destination checking is disabled where required by the platform.
 

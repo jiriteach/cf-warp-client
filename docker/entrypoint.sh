@@ -6,6 +6,13 @@ log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
 }
 
+is_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 log_command_output() {
   local prefix="$1"
 
@@ -42,6 +49,11 @@ set_sysctl_if_present() {
 }
 
 configure_forwarding() {
+  if ! is_true "${WARP_ENABLE_SUBNET_ROUTING:-false}"; then
+    log "WARP_ENABLE_SUBNET_ROUTING is disabled; skipping forwarding and reverse-path configuration"
+    return 0
+  fi
+
   set_sysctl_if_present net.ipv4.ip_forward 1
   set_sysctl_if_present net.ipv4.conf.all.forwarding 1
 
@@ -51,15 +63,17 @@ configure_forwarding() {
 }
 
 configure_firewall() {
+  if ! is_true "${WARP_ENABLE_SUBNET_ROUTING:-false}"; then
+    log "WARP_ENABLE_SUBNET_ROUTING is disabled; leaving iptables FORWARD chain unchanged"
+    return 0
+  fi
+
   local manage_forward_chain="${WARP_MANAGE_FORWARD_CHAIN:-true}"
 
-  case "${manage_forward_chain,,}" in
-    1|true|yes|on) ;;
-    *)
-      log "WARP_MANAGE_FORWARD_CHAIN is disabled; leaving iptables FORWARD chain unchanged"
-      return 0
-      ;;
-  esac
+  if ! is_true "${manage_forward_chain}"; then
+    log "WARP_MANAGE_FORWARD_CHAIN is disabled; leaving iptables FORWARD chain unchanged"
+    return 0
+  fi
 
   if command -v iptables >/dev/null 2>&1; then
     iptables -C FORWARD -j ACCEPT >/dev/null 2>&1 || iptables -A FORWARD -j ACCEPT
@@ -158,15 +172,12 @@ enroll_connector_if_requested() {
 connect_if_requested() {
   local autoconnect="${WARP_AUTOCONNECT:-true}"
 
-  case "${autoconnect,,}" in
-    1|true|yes|on)
-      log "Connecting WARP"
-      warp-cli --accept-tos connect 2>&1 | log_command_output "[warp-cli] "
-      ;;
-    *)
-      log "WARP_AUTOCONNECT is disabled; leaving the client disconnected"
-      ;;
-  esac
+  if is_true "${autoconnect}"; then
+    log "Connecting WARP"
+    warp-cli --accept-tos connect 2>&1 | log_command_output "[warp-cli] "
+  else
+    log "WARP_AUTOCONNECT is disabled; leaving the client disconnected"
+  fi
 }
 
 status_snapshot() {
