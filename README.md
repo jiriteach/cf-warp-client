@@ -2,6 +2,8 @@
 
 This repository builds a containerized Linux `warp-cli` client suitable for Cloudflare Mesh / WARP Connector style deployments.
 
+The container is configured to run on Docker's default bridge network only.
+
 The image installs:
 
 - `cloudflare-warp`
@@ -30,7 +32,6 @@ This container needs Linux networking features that are normally only available 
 docker run -d \
   --name warp-cli \
   --restart unless-stopped \
-  --network host \
   --cap-add NET_ADMIN \
   --cap-add NET_RAW \
   --device /dev/net/tun:/dev/net/tun \
@@ -46,6 +47,8 @@ docker run -d \
 export WARP_CONNECTOR_TOKEN='YOUR_CONNECTOR_TOKEN'
 docker compose up -d --build
 ```
+
+Compose uses bridge networking by default, and the included `docker-compose.yml` keeps that default.
 
 ## Behavior
 
@@ -68,5 +71,6 @@ The WARP state is persisted in `/var/lib/cloudflare-warp`, so reusing the named 
 ## Notes
 
 - Cloudflare’s current docs state Mesh nodes can run on Linux servers, VMs, and containers.
-- For subnet forwarding use cases, host networking plus `NET_ADMIN`, `NET_RAW`, `/dev/net/tun`, and `net.ipv4.ip_forward=1` are the important runtime requirements.
-- If you want the node to route traffic for other devices on the subnet, make sure the surrounding host or VM network configuration also forwards that traffic correctly.
+- This repo is set up for bridge mode only. Do not run it with `--network host` or `network_mode: host`.
+- The container still requires `NET_ADMIN`, `NET_RAW`, `/dev/net/tun`, and `net.ipv4.ip_forward=1`.
+- In bridge mode, the mesh node runs from the container namespace rather than directly on the host network.
