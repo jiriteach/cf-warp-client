@@ -17,11 +17,13 @@ It is designed for:
 - `ping`, `traceroute`, `iproute2`, `iptables`, `procps`
 - an entrypoint that:
   - starts `warp-svc`
+  - streams `warp-svc` logs into `docker logs`
   - enables IPv4 forwarding
   - disables `rp_filter` to avoid dropping asymmetric return traffic
   - accepts forwarded traffic in the `FORWARD` chain
   - optionally runs `warp-cli connector new <TOKEN>`
   - optionally runs `warp-cli connect`
+  - periodically logs `warp-cli status` changes
 
 ## Files
 
@@ -64,6 +66,12 @@ If you want to manage forwarding policy outside the container, set:
 export WARP_MANAGE_FORWARD_CHAIN=false
 ```
 
+The container also supports periodic status logging. The default interval is 15 seconds, and only changed status snapshots are emitted:
+
+```bash
+export WARP_STATUS_INTERVAL_SECONDS=15
+```
+
 ## Important runtime requirements
 
 Use:
@@ -81,7 +89,7 @@ With `host` networking, Docker Compose cannot apply network `sysctls` for the co
 
 ```bash
 docker exec -it cf-warp-cli warp-cli --accept-tos status
-docker exec -it cf-warp-cli warp-cli --accept-tos account
+docker exec -it cf-warp-cli warp-cli --accept-tos registration show
 docker exec -it cf-warp-cli ping -c 3 1.1.1.1
 docker exec -it cf-warp-cli traceroute 1.1.1.1
 ```

@@ -13,6 +13,7 @@ services:
       WARP_CONNECTOR_TOKEN: "${WARP_CONNECTOR_TOKEN}"
       WARP_AUTOCONNECT: "true"
       WARP_MANAGE_FORWARD_CHAIN: "true"
+      WARP_STATUS_INTERVAL_SECONDS: "${WARP_STATUS_INTERVAL_SECONDS:-15}"
     volumes:
       - ./data:/var/lib/cloudflare-warp
       - ./logs:/var/log/cloudflare-warp

@@ -6,6 +6,14 @@ log() {
   printf '[%s] %s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" "$*"
 }
 
+log_command_output() {
+  local prefix="$1"
+
+  while IFS= read -r line; do
+    log "${prefix}${line}"
+  done
+}
+
 require_root() {
   if [[ "$(id -u)" -ne 0 ]]; then
     log "This container must run as root."
@@ -60,9 +68,12 @@ configure_firewall() {
 }
 
 start_warp_service() {
+  : > /var/log/cloudflare-warp/warp-svc.stdout.log
   log "Starting warp-svc"
   warp-svc > /var/log/cloudflare-warp/warp-svc.stdout.log 2>&1 &
   WARP_SVC_PID=$!
+  tail -n 0 -F /var/log/cloudflare-warp/warp-svc.stdout.log | log_command_output "[warp-svc] " &
+  WARP_LOG_TAIL_PID=$!
 }
 
 wait_for_cli() {
@@ -95,7 +106,7 @@ enroll_connector_if_requested() {
   fi
 
   log "Enrolling connector"
-  warp-cli --accept-tos connector new "$token"
+  warp-cli --accept-tos connector new "$token" 2>&1 | log_command_output "[warp-cli] "
   touch /var/lib/cloudflare-warp/.connector-enrolled
 }
 
@@ -105,7 +116,7 @@ connect_if_requested() {
   case "${autoconnect,,}" in
     1|true|yes|on)
       log "Connecting WARP"
-      warp-cli --accept-tos connect
+      warp-cli --accept-tos connect 2>&1 | log_command_output "[warp-cli] "
       ;;
     *)
       log "WARP_AUTOCONNECT is disabled; leaving the client disconnected"
@@ -113,18 +124,62 @@ connect_if_requested() {
   esac
 }
 
+status_snapshot() {
+  warp-cli --accept-tos status 2>/dev/null || true
+}
+
+start_status_reporter() {
+  local interval="${WARP_STATUS_INTERVAL_SECONDS:-15}"
+
+  case "${interval}" in
+    ''|0)
+      log "WARP_STATUS_INTERVAL_SECONDS is disabled; not starting periodic status logging"
+      return 0
+      ;;
+  esac
+
+  (
+    local previous=""
+    local current=""
+
+    while kill -0 "${WARP_SVC_PID}" 2>/dev/null; do
+      current="$(status_snapshot)"
+      if [[ -n "${current}" && "${current}" != "${previous}" ]]; then
+        while IFS= read -r line; do
+          [[ -n "${line}" ]] || continue
+          log "[warp-status] ${line}"
+        done <<< "${current}"
+        previous="${current}"
+      fi
+      sleep "${interval}"
+    done
+  ) &
+  WARP_STATUS_PID=$!
+  log "Started periodic WARP status reporter with ${interval}s interval"
+}
+
 print_status() {
   if warp-cli --accept-tos registration show >/dev/null 2>&1; then
-    warp-cli --accept-tos registration show || true
+    warp-cli --accept-tos registration show 2>&1 | log_command_output "[warp-registration] "
   elif warp-cli --accept-tos registration >/dev/null 2>&1; then
-    warp-cli --accept-tos registration || true
+    warp-cli --accept-tos registration 2>&1 | log_command_output "[warp-registration] "
   fi
 
-  warp-cli --accept-tos status || true
+  warp-cli --accept-tos status 2>&1 | log_command_output "[warp-status] "
+}
+
+cleanup() {
+  log "Stopping background processes"
+  kill -TERM "${WARP_STATUS_PID:-}" 2>/dev/null || true
+  kill -TERM "${WARP_LOG_TAIL_PID:-}" 2>/dev/null || true
+  kill -TERM "${WARP_SVC_PID:-}" 2>/dev/null || true
+  wait "${WARP_STATUS_PID:-}" 2>/dev/null || true
+  wait "${WARP_LOG_TAIL_PID:-}" 2>/dev/null || true
+  wait "${WARP_SVC_PID:-}" 2>/dev/null || true
 }
 
 forward_signals() {
-  trap 'log "Stopping warp-svc"; kill -TERM "${WARP_SVC_PID}" 2>/dev/null || true; wait "${WARP_SVC_PID}" || true; exit 0' TERM INT
+  trap 'cleanup; exit 0' TERM INT
 }
 
 run_mode() {
@@ -161,6 +216,7 @@ main() {
   wait_for_cli
   enroll_connector_if_requested
   connect_if_requested
+  start_status_reporter
   run_mode "$@"
 }
 
